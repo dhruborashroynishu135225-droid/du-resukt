@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Physics 103 Results Search</title>
+  <style>
+    body{font-family: system-ui, -apple-system, "Noto Sans Bengali", Arial; padding:20px; max-width:900px; margin:auto;}
+    h1{font-size:1.4rem; margin-bottom:.2rem;}
+    .controls{display:flex; gap:.5rem; margin-bottom:1rem; align-items:center; flex-wrap:wrap;}
+    input[type="text"]{padding:.5rem; font-size:1rem; width:320px;}
+    button{padding:.5rem .8rem; font-size:.95rem; cursor:pointer;}
+    table{width:100%; border-collapse:collapse; margin-top:10px;}
+    th,td{border:1px solid #ddd; padding:.6rem; text-align:left;}
+    th{background:#f3f3f3;}
+    .notfound{margin-top:10px; color:#b00;}
+    .highlight{background: #fffbcc; font-weight:600;}
+    .small{font-size:.9rem; color:#555;}
+  </style>
+</head>
+<body>
+  <h1>Physics 103 — রেজাল্ট সার্চ</h1>
+  <div class="small">নাম টাইপ করো (আংশিক নাম থাকলেই চলে)। ডেটা ডেমো — প্রকৃত ডেটা ব্যবহারের আগে অনুমতি নিশ্চিত করো।</div>
+
+  <div class="controls">
+    <input id="q" type="text" placeholder="পূরো নাম বা আংশিক নাম লিখো (উদাঃ 'Dhrubo')" />
+    <button id="searchBtn">Search</button>
+    <button id="showAllBtn">Show All</button>
+    <button id="exportBtn">Export CSV</button>
+    <label style="margin-left:auto;">
+      Match mode:
+      <select id="mode">
+        <option value="partial">Partial (default)</option>
+        <option value="exact">Exact (case-insensitive)</option>
+      </select>
+    </label>
+  </div>
+
+  <div id="resultArea"></div>
+
+  <script>
+    // --- Demo data: পরিবর্তন করে তোমার JSON/DB ব্যবহার করতে পারো ---
+    const students = [
+      {name: "Dhruborash Roy Nishu", roll: "103001", marks: {Physics103: 75, Lab: 18}},
+      {name: "Rahim Uddin", roll: "103002", marks: {Physics103: 68, Lab: 16}},
+      {name: "Fatema Akter", roll: "103003", marks: {Physics103: 82, Lab: 20}},
+      {name: "S M Tanveer", roll: "103004", marks: {Physics103: 54, Lab: 14}},
+      {name: "Another Student", roll: "103005", marks: {Physics103: 68, Lab: 17}}
+    ];
+
+    const qEl = document.getElementById('q');
+    const resultArea = document.getElementById('resultArea');
+    const modeEl = document.getElementById('mode');
+
+    function renderTable(list, highlightTerm='') {
+      if (!list || list.length === 0) {
+        resultArea.innerHTML = '<div class="notfound">কোনো রেকর্ড পাওয়া যায়নি।</div>';
+        return;
+      }
+      let html = '<table><thead><tr><th>Roll</th><th>Name</th><th>Physics103</th><th>Lab</th><th>Total</th></tr></thead><tbody>';
+      const termLower = (highlightTerm||'').toLowerCase();
+      for (const s of list) {
+        const total = (s.marks.Physics103 || 0) + (s.marks.Lab || 0);
+        let displayName = escapeHtml(s.name);
+        if (termLower) {
+          // highlight matched substring (case-insensitive)
+          const idx = s.name.toLowerCase().indexOf(termLower);
+          if (idx !== -1) {
+            const before = escapeHtml(s.name.slice(0, idx));
+            const match = escapeHtml(s.name.slice(idx, idx + highlightTerm.length));
+            const after = escapeHtml(s.name.slice(idx + highlightTerm.length));
+            displayName = `${before}<span class="highlight">${match}</span>${after}`;
+          }
+        }
+        html += `<tr>
+          <td>${escapeHtml(s.roll || '')}</td>
+          <td>${displayName}</td>
+          <td>${escapeHtml(String(s.marks.Physics103 ?? ''))}</td>
+          <td>${escapeHtml(String(s.marks.Lab ?? ''))}</td>
+          <td>${escapeHtml(String(total))}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      resultArea.innerHTML = html;
+    }
+
+    function search() {
+      const q = qEl.value.trim();
+      const mode = modeEl.value;
+      if (!q) {
+        resultArea.innerHTML = '<div class="small">কোনো নাম দেওয়া হয়নি — "Show All" চাপলে সব দেখা যাবে।</div>';
+        return;
+      }
+      const qLow = q.toLowerCase();
+      let matches;
+      if (mode === 'exact') {
+        matches = students.filter(s => (s.name || '').toLowerCase() === qLow);
+      } else {
+        // partial: matches if query appears anywhere in name or roll
+        matches = students.filter(s => {
+          return (s.name || '').toLowerCase().includes(qLow) || (s.roll || '').toLowerCase().includes(qLow);
+        });
+      }
+      renderTable(matches, q);
+    }
+
+    function showAll() {
+      renderTable(students, '');
+    }
+
+    function exportCSV() {
+      if (!students || students.length === 0) return alert('No data to export.');
+      const rows = [];
+      rows.push(['roll','name','physics103','lab','total']);
+      for (const s of students) {
+        const total = (s.marks.Physics103 || 0) + (s.marks.Lab || 0);
+        rows.push([s.roll || '', s.name || '', s.marks.Physics103 ?? '', s.marks.Lab ?? '', total]);
+      }
+      const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], {type:'text/csv'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'physics103_results.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    // small helper to avoid XSS in table
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#039;');
+    }
+
+    // events
+    document.getElementById('searchBtn').addEventListener('click', search);
+    document.getElementById('showAllBtn').addEventListener('click', showAll);
+    document.getElementById('exportBtn').addEventListener('click', exportCSV);
+    qEl.addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+
+    // initial: show short hint
+    resultArea.innerHTML = '<div class="small">নাম লিখে Search চাপো অথবা Show All ক্লিক করো।</div>';
+  </script>
+</body>
+</html>
